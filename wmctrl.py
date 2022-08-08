@@ -1,6 +1,8 @@
 import attr
+import os
 
 VERSBOSE = False
+
 
 def getoutput(s):
     try:
@@ -12,20 +14,21 @@ def getoutput(s):
         print(s)
     return getoutput(s)
 
+
 def system(s):
-    import os
     if VERSBOSE:
         print(s)
     return os.system(s)
 
-def strip_prefix (prefix, word):
+
+def strip_prefix(prefix, word):
     if word.startswith(prefix):
-        return word[len(prefix):]
+        return word[len(prefix) :]
     return word
+
 
 def uniq(it):
     return list(set(it))
-
 
 
 @attr.s
@@ -48,45 +51,45 @@ class Window(object):
         if self._wm_window_role is not None:
             return self._wm_window_role
         #
-        out = getoutput('xprop -id %s WM_WINDOW_ROLE' % self.id)
+        out = getoutput("xprop -id %s WM_WINDOW_ROLE" % self.id)
         try:
-            _, value = out.split(' = ')
+            _, value = out.split(" = ")
         except ValueError:
             # probably xprop returned an error
-            self._wm_window_role = ''
+            self._wm_window_role = ""
         else:
             self._wm_window_role = value.strip('"')
         return self._wm_window_role
 
     @property
-    def wm_state (self):
+    def wm_state(self):
         if self._wm_state is not None:
             return self._wm_state
 
-        out = getoutput('xprop -id %s _NET_WM_STATE' % self.id)
+        out = getoutput("xprop -id %s _NET_WM_STATE" % self.id)
         try:
-            _, value = out.split(' = ')
+            _, value = out.split(" = ")
         except ValueError:
             # probably xprop returned an error
             self._wm_state = []
         else:
-            self._wm_state = [strip_prefix("_NET_WM_STATE_",s).lower()
-                              for s in value.split(', ')]
+            self._wm_state = [
+                strip_prefix("_NET_WM_STATE_", s).lower() for s in value.split(", ")
+            ]
         return self._wm_state
-
 
     @classmethod
     def list(cls):
-        out = getoutput('wmctrl -l -G -p -x')
+        out = getoutput("wmctrl -l -G -p -x")
         windows = []
         for line in out.splitlines():
             parts = line.split(None, 9)
             parts = list(map(str.strip, parts))
             parts[1:7] = map(int, parts[1:7])
-            if len(parts) == 9: # title is missing
-                parts.append('')
+            if len(parts) == 9:  # title is missing
+                parts.append("")
             elif len(parts) != 10:
-                continue # something was wrong
+                continue  # something was wrong
             windows.append(cls(*parts))
         return windows
 
@@ -141,7 +144,7 @@ class Window(object):
         return lst[0]
 
     def activate(self):
-        system('wmctrl -id -a %s' % self.id)
+        system("wmctrl -id -a %s" % self.id)
 
     def resize_and_move(self, x=None, y=None, w=None, h=None):
         # XXX: the "move" part doesn't really work, it is affected by this:
@@ -154,8 +157,8 @@ class Window(object):
             w = self.w
         if h is None:
             h = self.h
-        mvarg = '0,%d,%d,%d,%d' % (x, y, w, h)
-        system('wmctrl -i -r %s -e %s' % (self.id, mvarg))
+        mvarg = "0,%d,%d,%d,%d" % (x, y, w, h)
+        system("wmctrl -i -r %s -e %s" % (self.id, mvarg))
 
     def resize(self, w=None, h=None):
         self.resize_and_move(w=w, h=h)
@@ -169,31 +172,44 @@ class Window(object):
         self.move_to_destktop(-2)
 
     def move_to_destktop(self, n):
-        system('wmctrl -i -r %s -t %s' % (self.id, n))
+        system("wmctrl -i -r %s -t %s" % (self.id, n))
 
     def set_geometry(self, geometry):
-        dim, pos = geometry.split('+', 1)
-        w, h = map(int, dim.split('x'))
-        x, y = map(int, pos.split('+'))
+        dim, pos = geometry.split("+", 1)
+        w, h = map(int, dim.split("x"))
+        x, y = map(int, pos.split("+"))
         self.resize_and_move(x, y, w, h)
 
     def set_properties(self, properties):
         proparg = ",".join(properties)
-        system('wmctrl -i -r %s -b %s' % (self.id, proparg))
+        system("wmctrl -i -r %s -b %s" % (self.id, proparg))
 
     def set_decorations(self, v):
-        import gtk.gdk
+        try:
+            import gtk.gdk
+        except ImportError:
+            import gi
+
+            gi.require_version("Gtk", "3.0")
+            from gi.repository import Gtk as gtk
+
         w = gtk.gdk.window_foreign_new(int(self.id, 16))
         w.set_decorations(v)
         gtk.gdk.window_process_all_updates()
         gtk.gdk.flush()
 
-    def maximize(self, verb='add'):
+    def maximize(self, verb="add"):
         "verb can be 'add', 'remove' or 'toggle'"
-        self.set_properties([verb, 'maximized_vert', 'maximized_horz'])
+        self.set_properties([verb, "maximized_vert", "maximized_horz"])
 
     def unmaximize(self):
-        self.maximize('remove')
+        self.maximize("remove")
+
+    def hide(self):
+        os.system("xdotool windowunmap %s" % (self.id,))
+
+    def show(self):
+        os.system("xdotool windowmap %s" % (self.id,))
 
 
 @attr.s
@@ -204,13 +220,13 @@ class Desktop(object):
 
     @classmethod
     def list(cls):
-        out = getoutput('wmctrl -d')
+        out = getoutput("wmctrl -d")
         desktops = []
         for line in out.splitlines():
             parts = line.split(None, 9)
             parts = list(map(str.strip, parts))
             num = int(parts[0])
-            active = parts[1] == '*'
+            active = parts[1] == "*"
             name = parts[-1]
             desktops.append(cls(num, active, name))
         return desktops
@@ -224,8 +240,11 @@ class Desktop(object):
         # this should never happen, but who knows?
         return None
 
-if __name__ == '__main__':
-    for w in Window.list():
-        print('{w.id:10s} {w.x:4d} {w.y:4d} {w.w:4d} {w.h:4d} {w.wm_name} - {w.wm_class} - {w.wm_window_role}'.format(w=w))
 
-    
+if __name__ == "__main__":
+    for w in Window.list():
+        print(
+            "{w.id:10s} {w.x:4d} {w.y:4d} {w.w:4d} {w.h:4d} {w.wm_name} - {w.wm_class} - {w.wm_window_role}".format(
+                w=w
+            )
+        )
